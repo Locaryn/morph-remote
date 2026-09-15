@@ -1,6 +1,6 @@
 [package]
 name = "locaryn-plugin-remote"
-version = "3.1.0"
+version = "3.2.0"
 edition = "2021"
 description = "Official Locaryn Extension: two extra pairing modes for the server settings — a reachable port, and an outbound tunnel driven by the local service"
 license = "Apache-2.0"
@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "locaryn-remote-mcp"
 path = "src/bin/remote_mcp.rs"
 
+[[bin]]
+name = "locaryn-pair-launcher"
+path = "src/bin/pair_launcher.rs"
+
 [dependencies]
 anyhow = "1"
 thiserror = "2"
@@ -19,5 +23,6 @@ tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
+qrcodegen = "1"
 
 [workspace]
