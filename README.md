@@ -1,6 +1,6 @@
-# plugin-travel-tunnel
+# morph-remote
 
-Extension de mode distant et tunnels chiffrés pour Locaryn.
+L'extension d'accès distant de Locaryn : ouverture de port, tunnels chiffrés, et appairage des appareils et deuxièmes ordinateurs.
 
 ## Appairer un appareil
 

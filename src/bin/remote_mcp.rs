@@ -1,4 +1,4 @@
-//! Stdio MCP server shipped by plugin-travel-tunnel.
+//! Stdio MCP server shipped by morph-remote.
 use locaryn_plugin_remote::link_build::{
     build_connect_link, build_pairing_launcher, derive_certificate_urls, find_launcher_bytes,
 };
@@ -39,7 +39,7 @@ async fn handle_request(request: Value) -> Value {
             json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "plugin-travel-tunnel", "version": VERSION }
+                "serverInfo": { "name": "morph-remote", "version": VERSION }
             }),
         ),
         "tools/list" => success(id, tools_list()),
