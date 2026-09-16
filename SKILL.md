@@ -1,6 +1,6 @@
 ---
 name: remote-mode
-description: Lancer des tunnels sortants chiffrés, générer des QR d'appairage, produire le .exe d'appairage pour un deuxième PC, et préparer les certificats pour une installation manuelle.
+description: Lancer des tunnels sortants chiffrés, générer des QR d'appairage, produire le .exe d'appairage pour un deuxième PC, et préparer les certificats d'appairage.
 ---
 
 # Compétence Mode Distant & Tunnels
@@ -25,6 +25,19 @@ serveur (`https://…`, celle que le tunnel ou le port redirigé annonce) :
   là-bas avant toute connexion. Le fichier est déposé dans le dossier de
   données du morph ; la réponse dit où.
 
+## Les certificats, embarqués dans le lien
+
+Les trois outils embarquent d'eux-mêmes les URLs `cert` et `ca` du serveur
+(`{serveur}/v1/pairing/cert` et `{serveur}/v1/pairing/ca`) : l'application de
+destination télécharge et installe les certificats toute seule, après
+consentement. Le paquet client est protégé par les identifiants du serveur —
+c'est le paramètre `user`/`password` du lien qui les porte, et la modale de
+consentement reste le lieu où la personne les a fournis.
+
+Ne passez `cert`/`ca` que si la personne héberge elle-même ces fichiers
+(reverse proxy, hébergement personnel) : un choix explicite n'est jamais
+réécrit.
+
 ## Le mot de passe, jamais par défaut
 
 `password` est un paramètre optionnel de ces trois outils. Ne le remplissez
@@ -32,11 +45,3 @@ serveur (`https://…`, celle que le tunnel ou le port redirigé annonce) :
 lien et dans le fichier généré, et la réponse le rappelle. Sans mot de passe,
 l'application de destination le demande à la connexion — c'est le comportement
 normal.
-
-## Installation manuelle des certificats
-
-Quand le serveur utilise une autorité auto-signée, le lien ne peut pas servir
-les certificats (HTTPS strict côté application). Dans ce cas, donnez à la
-personne les URLs `cert` et `ca` hébergées par son serveur : elle les ouvre
-dans un navigateur, puis installe les fichiers téléchargés via Réglages →
-Connexion → Installer… sur le poste client.

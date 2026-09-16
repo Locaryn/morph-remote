@@ -123,6 +123,55 @@ pub fn build_pairing_launcher(launcher_bytes: &[u8], link: &BuiltLink) -> Result
     Ok(out)
 }
 
+/// Dérive les URLs `cert`/`ca` de l'adresse du serveur quand la personne ne
+/// les a pas fournies. Le daemon hôte expose ces deux routes (voir la
+/// spécification §4 et `routes/pairing.rs`) ; le lien les embarque pour que
+/// la machine distante installe ses certificats toute seule — sans elles,
+/// l'appairage par lien resterait bloqué derrière l'installation manuelle.
+///
+/// Si la personne a passé une URL explicite (reverse proxy, hébergement
+/// personnel), elle gagne : on ne réécrit jamais ce qui est explicite.
+/// Une valeur explicitement vide vaut absence — même règle que dans
+/// `build_connect_link`, pour que les deux chemins se répondent.
+fn sans_vide(s: Option<&str>) -> Option<&str> {
+    match s {
+        Some(v) => {
+            let t = v.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
+            }
+        }
+        None => None,
+    }
+}
+
+pub fn derive_certificate_urls(
+    server: &str,
+    cert: Option<&str>,
+    ca: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    let cert = sans_vide(cert);
+    let ca = sans_vide(ca);
+    if cert.is_some() || ca.is_some() {
+        // Une des deux au moins est explicite : l'assemblage doit rester
+        // exactement ce qu'on lui a donné — et `build_connect_link` validera
+        // le HTTPS strict.
+        return (cert.map(str::to_string), ca.map(str::to_string));
+    }
+    let base = server.trim().trim_end_matches('/');
+    if !(base.starts_with("https://") || base.starts_with("http://")) {
+        // `build_connect_link` refusera cette adresse avec le vrai message :
+        // pas de dérivation à moitié juste ici.
+        return (None, None);
+    }
+    (
+        Some(format!("{base}/v1/pairing/cert")),
+        Some(format!("{base}/v1/pairing/ca")),
+    )
+}
+
 /// Retrouver le binaire du lanceur à côté du serveur MCP. Le chemin des
 /// binaires du morph est standard : même dossier que `current_exe`.
 pub fn find_launcher_bytes() -> Option<Vec<u8>> {
@@ -217,6 +266,50 @@ mod tests {
         assert!(build_connect_link("", None, None, None, None).is_err());
         assert!(build_connect_link("192.168.1.10:7474", None, None, None, None).is_err());
     }
+    #[test]
+    fn cert_and_ca_are_derived_from_the_server_url() {
+        let (cert, ca) = derive_certificate_urls("https://192.168.1.10:7474/", None, None);
+        assert_eq!(
+            cert.as_deref(),
+            Some("https://192.168.1.10:7474/v1/pairing/cert")
+        );
+        assert_eq!(
+            ca.as_deref(),
+            Some("https://192.168.1.10:7474/v1/pairing/ca")
+        );
+        let (cert, ca) = derive_certificate_urls("http://192.168.1.10:7474", None, None);
+        assert_eq!(
+            cert.as_deref(),
+            Some("http://192.168.1.10:7474/v1/pairing/cert")
+        );
+        assert_eq!(
+            ca.as_deref(),
+            Some("http://192.168.1.10:7474/v1/pairing/ca")
+        );
+    }
+
+    #[test]
+    fn explicit_cert_wins_and_partial_explicit_wins_too() {
+        let (cert, ca) = derive_certificate_urls(
+            "https://a.example",
+            Some("https://relay.example/ca.pem"),
+            None,
+        );
+        assert_eq!(cert.as_deref(), Some("https://relay.example/ca.pem"));
+        assert!(
+            ca.is_none(),
+            "rien n'est inventé à côté d'un choix explicite"
+        );
+    }
+
+    #[test]
+    fn empty_or_bare_server_derives_nothing() {
+        let (cert, ca) = derive_certificate_urls("   ", None, None);
+        assert!(cert.is_none() && ca.is_none());
+        let (cert, ca) = derive_certificate_urls("192.168.1.10:7474", None, None);
+        assert!(cert.is_none() && ca.is_none());
+    }
+
     #[test]
     fn empty_optional_params_are_treated_as_absent() {
         let l =

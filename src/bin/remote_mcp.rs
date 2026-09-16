@@ -1,6 +1,6 @@
 //! Stdio MCP server shipped by plugin-travel-tunnel.
 use locaryn_plugin_remote::link_build::{
-    build_connect_link, build_pairing_launcher, find_launcher_bytes,
+    build_connect_link, build_pairing_launcher, derive_certificate_urls, find_launcher_bytes,
 };
 use locaryn_plugin_remote::list_providers;
 use serde_json::{json, Value};
@@ -81,14 +81,14 @@ fn tools_list() -> Value {
             },
             {
                 "name": "build_connect_link",
-                "description": "Construit un lien locaryn://connect — le format de l'application (voir docs/api/locaryn-deep-links.md côté hôte). `server` est obligatoire (https:// ou http://) ; `user`, `password`, `cert` et `ca` sont optionnels. Le mot de passe ne s'embarque que sur demande explicite de la personne, et la réponse le rappelle.",
+                "description": "Construit un lien locaryn://connect — le format de l'application (voir docs/api/locaryn-deep-links.md côté hôte). `server` est obligatoire (https:// ou http://) ; `user` et `password` sont optionnels ; `cert` et `ca` sont dérivés automatiquement du serveur (/v1/pairing/cert et /v1/pairing/ca) quand ils manquent — ne les passer que pour un reverse proxy ou un hébergement personnel. Le mot de passe ne s'embarque que sur demande explicite de la personne, et la réponse le rappelle.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "server": { "type": "string", "description": "Adresse publique du serveur, ex. https://maison.exemple:7474" },
                         "user": { "type": "string", "description": "Identifiant pré-rempli (optionnel)" },
                         "password": { "type": "string", "description": "Mot de passe à embarquer — uniquement si la personne le demande explicitement (optionnel, reste en clair dans le fichier)" },
-                        "cert": { "type": "string", "description": "URL HTTPS du paquet certificat client+clé hébergé par le serveur (optionnel)" },
+                        "cert": { "type": "string", "description": "URL HTTPS du paquet certificat client+clé (optionnel — dérivé du serveur si absent)" },
                         "ca": { "type": "string", "description": "URL HTTPS de l'autorité locale, si le serveur n'a pas d'autorité publique (optionnel)" }
                     },
                     "required": ["server"]
@@ -157,17 +157,25 @@ fn link_payload(l: locaryn_plugin_remote::link_build::BuiltLink) -> Value {
     json!({ "link": l.link, "warning": l.warning })
 }
 
+/// Le lien tel que la personne l'a demandé : les URLs de certificat sont
+/// dérivées de l'adresse du serveur quand elles manquent — c'est ce qui rend
+/// l'appairage par lien complet, sans installation manuelle des certificats.
+/// Un choix explicite (reverse proxy, hébergement propre) gagne toujours.
+fn lien_complet(p: LinkParams<'_>) -> Result<locaryn_plugin_remote::link_build::BuiltLink, String> {
+    let (cert, ca) = derive_certificate_urls(p.server, p.cert, p.ca);
+    build_connect_link(p.server, p.user, p.password, cert.as_deref(), ca.as_deref())
+}
+
 async fn call_tool(name: &str, args: Value) -> Result<Value, String> {
     match name {
         "list_providers" => Ok(json!({ "providers": list_providers() })),
         "build_connect_link" => {
             let p = extract_link_params(&args)?;
-            build_connect_link(p.server, p.user, p.password, p.cert, p.ca)
-                .map(link_payload)
+            lien_complet(p).map(link_payload)
         }
         "build_connect_qr" => {
             let p = extract_link_params(&args)?;
-            let l = build_connect_link(p.server, p.user, p.password, p.cert, p.ca)?;
+            let l = lien_complet(p)?;
             let svg = locaryn_plugin_remote::link_build::qr_svg(&l.link)?;
             Ok(json!({
                 "qr_svg": svg,
@@ -189,7 +197,7 @@ async fn call_tool(name: &str, args: Value) -> Result<Value, String> {
             } else {
                 format!("{filename}.exe")
             };
-            let l = build_connect_link(p.server, p.user, p.password, p.cert, p.ca)?;
+            let l = lien_complet(p)?;
             let bytes = find_launcher_bytes().ok_or(
                 "Le binaire locaryn-pair-launcher est introuvable à côté du serveur MCP. \
                  Compilez-le (cargo build --release -p locaryn-plugin-remote --bin locaryn-pair-launcher) \
