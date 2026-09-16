@@ -62,6 +62,77 @@
   }
 
   /**
+   * Les outils du morph, par le canal que l'hôte prête au panneau.
+   *
+   * Le pont `locaryn` est dans la portée du script (l'application évalue ce
+   * fichier avec le bridge en paramètre) ; `core.invokeExtensionTool` est la
+   * voie de secours si l'API évolue. Rien n'est appelé en direct : c'est le
+   * canal de l'hôte, avec ses permissions, ou rien.
+   */
+  function outils() {
+    if (typeof locaryn !== "undefined" && locaryn && locaryn.tools) return locaryn.tools;
+    if (typeof core !== "undefined" && core && typeof core.invokeExtensionTool === "function") {
+      return { invoke: (nom, args) => core.invokeExtensionTool(nom, args) };
+    }
+    return null;
+  }
+
+  /**
+   * Le bloc « pour un autre PC » : le lanceur .exe d'appairage.
+   *
+   * Le téléphone qui est dans la pièce scanne le QR ; un deuxième ordinateur
+   * n'a pas d'appareil photo utile — il exécute le fichier. Le morph fabrique
+   * le lanceur (outil `build_pairing_launcher`), le dépose dans son dossier de
+   * données, et le panneau dit où. Le fichier n'ouvre rien tout seul :
+   * l'application de destination demande confirmation avant toute connexion.
+   */
+  function blocLanceur(adresse, surErreur) {
+    const bloc = creer("div", "locaryn-pairing-public");
+    bloc.appendChild(
+      creer(
+        "p",
+        "locaryn-field-hint",
+        "Pour connecter un deuxième ordinateur : générez le lanceur, transmettez-le (clé USB, partage), et exécutez-le là-bas.",
+      ),
+    );
+    const actions = creer("div", "locaryn-pairing-actions");
+    const bouton = creer("button", "locaryn-btn-ghost", "Générer le lanceur Windows (.exe)");
+    bouton.type = "button";
+    bouton.addEventListener("click", async () => {
+      const o = outils();
+      if (!o) {
+        surErreur("Ce panneau n'a pas reçu le canal d'outils de l'application.");
+        return;
+      }
+      bouton.disabled = true;
+      bouton.textContent = "Génération…";
+      try {
+        const brut = await o.invoke("build_pairing_launcher", {
+          server: /^https?:\/\//.test(adresse) ? adresse : "https://" + adresse,
+        });
+        const r = typeof brut === "string" ? JSON.parse(brut) : brut;
+        const ancien = bloc.querySelector("[data-role=resultat]");
+        if (ancien) ancien.remove();
+        const res = creer("div", "locaryn-field-hint");
+        res.setAttribute("data-role", "resultat");
+        res.appendChild(creer("span", null, "Fichier prêt : "));
+        const code = creer("code", null, r.path || r.filename || "");
+        res.appendChild(code);
+        if (r.warning) res.appendChild(avertissement(r.warning));
+        bloc.appendChild(res);
+        bouton.textContent = "Régénérer le lanceur";
+      } catch (e) {
+        bouton.disabled = false;
+        bouton.textContent = "Générer le lanceur Windows (.exe)";
+        surErreur(String(e && e.message ? e.message : e));
+      }
+    });
+    actions.appendChild(bouton);
+    bloc.appendChild(actions);
+    return bloc;
+  }
+
+  /**
    * Le bloc du QR, identique a celui de l'hote.
    *
    * Le SVG vient du service local par la fonction que l'hote a pretee : il
@@ -200,6 +271,16 @@
       if (this.code && this.code.qr_svg) {
         this.appendChild(
           blocQr(this.code, (m) => {
+            this.erreur = m;
+            this.rendre();
+          }),
+        );
+      }
+      // Le QR mène au téléphone ; le lanceur mène au deuxième PC. Les deux
+      // n'ont de sens qu'une fois l'adresse validée par le service.
+      if (this.code && this.adresse.trim() !== "") {
+        this.appendChild(
+          blocLanceur(this.adresse.trim(), (m) => {
             this.erreur = m;
             this.rendre();
           }),

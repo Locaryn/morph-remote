@@ -1,15 +1,15 @@
 {
   "$schema": "https://locaryn.dev/schema/morph.json/v0.1",
   "apiVersion": "0.1",
-  "name": "morph-travel-tunnel",
-  "version": "3.1.0",
-  "description": "Ajoute deux modes d'appairage aux réglages serveur : un port joignable de l'extérieur, et un tunnel sortant vers un relais (Cloudflare, ngrok, tunnels Microsoft) sans rien ouvrir sur la box.",
+  "name": "morph-remote",
+  "version": "3.3.0",
+  "description": "L'accès distant complet : ouverture de port, tunnel sortant chiffré (Cloudflare, ngrok, tunnels Microsoft) sans rien ouvrir sur la box, et appairage d'un appareil ou d'un deuxième ordinateur par QR, lien ou .exe.",
   "author": "Locaryn Team",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/Locaryn/morph-travel-tunnel",
-  "repository": "https://github.com/Locaryn/morph-travel-tunnel",
+  "homepage": "https://github.com/Locaryn/morph-remote",
+  "repository": "https://github.com/Locaryn/morph-remote",
   "keywords": [
-    "travel-tunnel",
+    "remote",
     "remote-mode",
     "tunnels",
     "cloudflare",
@@ -63,12 +63,28 @@
   "stability": "tested",
   "versions": [
     {
+      "version": "3.3.0",
+      "is_beta": false,
+      "summary": "Le lien d'appairage embarque automatiquement les URLs des certificats du serveur (/v1/pairing/cert et /v1/pairing/ca) : l'application installe ses certificats toute seule. Les lanceurs déjà générés migrent automatiquement vers le nouveau dossier de données.",
+      "tag": "v3.3.0",
+      "released_at": "2026-09-16",
+      "install_source": "Locaryn/morph-remote#v3.3.0"
+    },
+    {
+      "version": "3.2.0",
+      "is_beta": false,
+      "summary": "Générateur d'appairage : lien locaryn://connect, QR dédié et .exe d'appairage pour un deuxième ordinateur.",
+      "tag": "v3.2.0",
+      "released_at": "2026-09-16",
+      "install_source": "Locaryn/morph-remote#v3.2.0"
+    },
+    {
       "version": "3.1.0",
       "is_beta": false,
       "summary": "Quatrième relais : votre propre serveur, par renvoi de port SSH. Ni compte, ni quota, ni tiers.",
       "tag": "v3.1.0",
       "released_at": "2026-08-30",
-      "install_source": "Locaryn/morph-travel-tunnel#v3.1.0"
+      "install_source": "Locaryn/morph-remote#v3.1.0"
     },
     {
       "version": "3.0.0",
@@ -76,7 +92,7 @@
       "summary": "Les deux modes d'appairage s'ajoutent aux réglages serveur ; le tunnel est celui du service, plus celui du morph.",
       "tag": "v3.0.0",
       "released_at": "2026-08-30",
-      "install_source": "Locaryn/morph-travel-tunnel#v3.0.0"
+      "install_source": "Locaryn/morph-remote#v3.0.0"
     },
     {
       "version": "2.2.0-beta.1",
@@ -84,7 +100,7 @@
       "summary": "Version Bêta (2.2.0-beta.1) — pre-release non testée par des utilisateurs",
       "tag": "v2.2.0-beta.1",
       "released_at": "2026-08-29",
-      "install_source": "Locaryn/morph-travel-tunnel#v2.2.0-beta.1"
+      "install_source": "Locaryn/morph-remote#v2.2.0-beta.1"
     },
     {
       "version": "2.1.0",
@@ -92,7 +108,7 @@
       "summary": "Version stable de référence v2.1.0",
       "tag": "v2.1.0",
       "released_at": "2026-08-27",
-      "install_source": "Locaryn/morph-travel-tunnel#v2.1.0"
+      "install_source": "Locaryn/morph-remote#v2.1.0"
     },
     {
       "version": "2.0.0",
@@ -100,7 +116,7 @@
       "summary": "Version stable de référence v2.0.0",
       "tag": "v2.0.0",
       "released_at": "2026-08-27",
-      "install_source": "Locaryn/morph-travel-tunnel#v2.0.0"
+      "install_source": "Locaryn/morph-remote#v2.0.0"
     },
     {
       "version": "1.0.0",
@@ -108,7 +124,7 @@
       "summary": "Version stable de référence v1.0.0",
       "tag": "v1.0.0",
       "released_at": "2026-08-27",
-      "install_source": "Locaryn/morph-travel-tunnel#v1.0.0"
+      "install_source": "Locaryn/morph-remote#v1.0.0"
     }
   ]
 }

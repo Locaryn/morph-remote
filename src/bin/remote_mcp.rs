@@ -1,4 +1,8 @@
-//! Stdio MCP server shipped by plugin-travel-tunnel.
+//! Stdio MCP server shipped by morph-remote.
+use locaryn_plugin_remote::data_migration::migrate_launchers;
+use locaryn_plugin_remote::link_build::{
+    build_connect_link, build_pairing_launcher, derive_certificate_urls, find_launcher_bytes,
+};
 use locaryn_plugin_remote::list_providers;
 use serde_json::{json, Value};
 use std::io::Write;
@@ -8,6 +12,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tokio::main]
 async fn main() {
+    migrate_data_folders();
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     while let Ok(Some(line)) = lines.next_line().await {
         if line.trim().is_empty() {
@@ -36,7 +41,7 @@ async fn handle_request(request: Value) -> Value {
             json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "plugin-travel-tunnel", "version": VERSION }
+                "serverInfo": { "name": "morph-remote", "version": VERSION }
             }),
         ),
         "tools/list" => success(id, tools_list()),
@@ -73,22 +78,235 @@ fn tools_list() -> Value {
         "tools": [
             {
                 "name": "list_providers",
-                "description": "Les relais de tunnel connus, et lesquels sont installes ici.                                 `needs_account` dit lequel exige une inscription avant de servir ;                                 `install_hint` dit comment obtenir celui qui manque.",
+                "description": "Les relais de tunnel connus, et lesquels sont installes ici. `needs_account` dit lequel exige une inscription avant de servir ; `install_hint` dit comment obtenir celui qui manque.",
                 "inputSchema": { "type": "object", "properties": {} }
+            },
+            {
+                "name": "build_connect_link",
+                "description": "Construit un lien locaryn://connect — le format de l'application (voir docs/api/locaryn-deep-links.md côté hôte). `server` est obligatoire (https:// ou http://) ; `user` et `password` sont optionnels ; `cert` et `ca` sont dérivés automatiquement du serveur (/v1/pairing/cert et /v1/pairing/ca) quand ils manquent — ne les passer que pour un reverse proxy ou un hébergement personnel. Le mot de passe ne s'embarque que sur demande explicite de la personne, et la réponse le rappelle.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "server": { "type": "string", "description": "Adresse publique du serveur, ex. https://maison.exemple:7474" },
+                        "user": { "type": "string", "description": "Identifiant pré-rempli (optionnel)" },
+                        "password": { "type": "string", "description": "Mot de passe à embarquer — uniquement si la personne le demande explicitement (optionnel, reste en clair dans le fichier)" },
+                        "cert": { "type": "string", "description": "URL HTTPS du paquet certificat client+clé (optionnel — dérivé du serveur si absent)" },
+                        "ca": { "type": "string", "description": "URL HTTPS de l'autorité locale, si le serveur n'a pas d'autorité publique (optionnel)" }
+                    },
+                    "required": ["server"]
+                }
+            },
+            {
+                "name": "build_connect_qr",
+                "description": "Le même lien locaryn://connect, dessiné en QR (SVG) pour un téléphone qui est dans la pièce.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "server": { "type": "string" },
+                        "user": { "type": "string" },
+                        "password": { "type": "string" },
+                        "cert": { "type": "string" },
+                        "ca": { "type": "string" }
+                    },
+                    "required": ["server"]
+                }
+            },
+            {
+                "name": "build_pairing_launcher",
+                "description": "Génère le .exe d'appairage : le lanceur minuscule qui embarque le lien locaryn://connect et l'ouvre dans l'application déjà installée. Le .exe est déposé dans le dossier de données, et la réponse dit où. Ne transmettez le fichier qu'à vos propres machines si le mot de passe y est.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "server": { "type": "string" },
+                        "user": { "type": "string" },
+                        "password": { "type": "string" },
+                        "cert": { "type": "string" },
+                        "ca": { "type": "string" },
+                        "filename": { "type": "string", "description": "Nom du fichier produit (défaut : Appairage-Locaryn.exe)" }
+                    },
+                    "required": ["server"]
+                }
             }
         ]
     })
 }
 
-async fn call_tool(name: &str, _args: Value) -> Result<Value, String> {
+/// Les paramètres communs aux trois outils de lien, extraits d'un appel.
+struct LinkParams<'a> {
+    server: &'a str,
+    user: Option<&'a str>,
+    password: Option<&'a str>,
+    cert: Option<&'a str>,
+    ca: Option<&'a str>,
+}
+
+fn extract_link_params(args: &Value) -> Result<LinkParams<'_>, String> {
+    let server = args
+        .get("server")
+        .and_then(Value::as_str)
+        .ok_or("Paramètre server manquant.")?;
+    let opt = |k: &str| args.get(k).and_then(Value::as_str);
+    Ok(LinkParams {
+        server,
+        user: opt("user"),
+        password: opt("password"),
+        cert: opt("cert"),
+        ca: opt("ca"),
+    })
+}
+
+fn link_payload(l: locaryn_plugin_remote::link_build::BuiltLink) -> Value {
+    json!({ "link": l.link, "warning": l.warning })
+}
+
+/// Le lien tel que la personne l'a demandé : les URLs de certificat sont
+/// dérivées de l'adresse du serveur quand elles manquent — c'est ce qui rend
+/// l'appairage par lien complet, sans installation manuelle des certificats.
+/// Un choix explicite (reverse proxy, hébergement propre) gagne toujours.
+fn lien_complet(p: LinkParams<'_>) -> Result<locaryn_plugin_remote::link_build::BuiltLink, String> {
+    let (cert, ca) = derive_certificate_urls(p.server, p.cert, p.ca);
+    build_connect_link(p.server, p.user, p.password, cert.as_deref(), ca.as_deref())
+}
+
+async fn call_tool(name: &str, args: Value) -> Result<Value, String> {
     match name {
         "list_providers" => Ok(json!({ "providers": list_providers() })),
+        "build_connect_link" => {
+            let p = extract_link_params(&args)?;
+            lien_complet(p).map(link_payload)
+        }
+        "build_connect_qr" => {
+            let p = extract_link_params(&args)?;
+            let l = lien_complet(p)?;
+            let svg = locaryn_plugin_remote::link_build::qr_svg(&l.link)?;
+            Ok(json!({
+                "qr_svg": svg,
+                "link": l.link,
+                "warning": l.warning,
+                "say": "Scannez avec le téléphone : l'application demande confirmation avant toute connexion."
+            }))
+        }
+        "build_pairing_launcher" => {
+            let p = extract_link_params(&args)?;
+            let filename = args
+                .get("filename")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Appairage-Locaryn.exe");
+            let filename = if filename.to_lowercase().ends_with(".exe") {
+                filename.to_string()
+            } else {
+                format!("{filename}.exe")
+            };
+            let l = lien_complet(p)?;
+            let bytes = find_launcher_bytes().ok_or(
+                "Le binaire locaryn-pair-launcher est introuvable à côté du serveur MCP. \
+                 Compilez-le (cargo build --release -p locaryn-plugin-remote --bin locaryn-pair-launcher) \
+                 et placez-le dans le dossier bin du morph.",
+            )?;
+            let exe = build_pairing_launcher(&bytes, &l)?;
+            // Le fichier est déposé dans le dossier de données du morph : un
+            // endroit que l'application sait lire, et que la personne peut
+            // récupérer par ses propres moyens.
+            let dir = locaryn_config_shim::data_dir()?;
+            migrate_data_folders();
+            std::fs::create_dir_all(&dir)
+                .map_err(|e| format!("dossier de données : {e}"))?;
+            let path = dir.join(&filename);
+            std::fs::write(&path, &exe)
+                .map_err(|e| format!("écriture du lanceur : {e}"))?;
+            Ok(json!({
+                "path": path.display().to_string(),
+                "filename": filename,
+                "size_bytes": exe.len(),
+                "link": l.link,
+                "warning": l.warning,
+                "say": "Transmettez ce fichier à la machine à connecter. En l'exécutant, elle ouvrira l'application et une demande de connexion s'affichera avant toute connexion."
+            }))
+        }
         "start_remote_tunnel" | "stop_remote_tunnel" | "tunnel_status" => Err(
-            "Le tunnel appartient au service local, pas a ce morph : ouvrez-le depuis              Reglages -> Serveur & fonctions, segment Tunnel."
+            "Le tunnel appartient au service local, pas a ce morph : ouvrez-le depuis Reglages -> Serveur & fonctions, segment Tunnel."
                 .to_string(),
         ),
         _ => Err(format!("Outil tunnel inconnu : {name}")),
     }
+}
+
+/// Le dossier où déposer ce que l'outil produit. Petit shim local : le morph
+/// ne dépend pas de la config de l'hôte, et un dossier de données par défaut
+/// suffit — la personne récupère le fichier ensuite par ses moyens.
+///
+/// Le nom du dossier suit celui du morph. Il est aujourd'hui `remote` : c'est
+/// là que la v3.3 dépose les lanceurs. L'ancien nom (`travel-tunnel`) reste
+/// connu : c'est de là que la migration ramène les lanceurs déjà générés.
+mod locaryn_config_shim {
+    use std::path::PathBuf;
+
+    /// Le dossier courant, dérivé du nom actuel du morph.
+    pub fn data_dir() -> Result<PathBuf, String> {
+        let home = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .ok_or("Aucun répertoire utilisateur connu (USERPROFILE/HOME).")?;
+        Ok(home_dir(&home).join("remote"))
+    }
+
+    /// Les dossiers connus pour avoir porté les données du morph, du plus
+    /// ancien au plus récent. Ajouter le nouveau nom ici suffit si un jour il
+    /// change encore.
+    pub(crate) fn legacy_dirs(home: &std::ffi::OsStr) -> Vec<PathBuf> {
+        let mut v = Vec::new();
+        let mut p = PathBuf::from(home);
+        p.push(".lochor");
+        p.push("morph");
+        p.push("travel-tunnel");
+        v.push(p);
+        v
+    }
+
+    fn home_dir(home: &std::ffi::OsStr) -> PathBuf {
+        let mut p = PathBuf::from(home);
+        p.push(".lochor");
+        p.push("morph");
+        p
+    }
+}
+
+/// Ramène les lanceurs des anciens dossiers de données vers le dossier
+/// courant, une fois au démarrage puis avant chaque génération (un serveur
+/// MCP peut tourner longtemps : la migration peut être arrivée pendant qu'il
+/// tournait, ou avoir été ratée au démarrage). Jamais bloquant : une erreur
+/// est consignée, la génération n'a besoin d'aucun fichier hérité.
+fn migrate_data_folders() {
+    let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) else {
+        return;
+    };
+    let Ok(current) = locaryn_config_shim::data_dir() else {
+        return;
+    };
+    for legacy in locaryn_config_shim::legacy_dirs(&home) {
+        if legacy == current {
+            continue;
+        }
+        match migrate_launchers(&legacy, &current) {
+            Ok((moved, _left)) if moved > 0 => {
+                tracing_or_log(&format!(
+                    "migration : {} lanceur(s) déplacé(s) de {} vers {}",
+                    moved,
+                    legacy.display(),
+                    current.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => tracing_or_log(&format!("migration de {} ignorée : {e}", legacy.display())),
+        }
+    }
+}
+
+/// Ce morph n'a pas de dépendance de journalisation : un simple eprintln
+/// sur stderr, canal des diagnostics en stdio MCP (stdout porte le protocole).
+fn tracing_or_log(message: &str) {
+    eprintln!("[morph-remote] {message}");
 }
 
 fn text_content(value: Value) -> Value {
