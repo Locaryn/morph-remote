@@ -25,6 +25,15 @@ Le mot de passe n'est embarqué que sur demande explicite de la personne : il
 reste en clair dans le lien et le fichier, la réponse le rappelle. C'est aussi
 lui qui protège le téléchargement du paquet certificat client sur le serveur.
 
+## Compatibilité : les lanceurs déjà générés
+
+Le morph a été renommé (morph-travel-tunnel → morph-remote). Depuis la v3.3,
+les lanceurs sont déposés dans `~/.lochor/morph/remote` ; ceux générés avant
+le renommage vivent encore dans `~/.lochor/morph/travel-tunnel`. **La v3.3
+les ramène automatiquement** vers le nouveau dossier — au démarrage du serveur
+MCP et avant chaque génération — sans jamais écraser un fichier plus récent.
+Rien à faire : un lanceur de la v3.2 reste trouvable après la mise à jour.
+
 Pour compiler le binaire du lanceur (à placer à côté du serveur MCP) :
 
 ```sh

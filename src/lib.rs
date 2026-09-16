@@ -16,6 +16,7 @@
 //! autre l'interroge, un troisième le ferme — il ne se referme pas tout seul
 //! entre deux messages.
 
+pub mod data_migration;
 pub mod link_build;
 pub mod tunnel;
 

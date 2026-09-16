@@ -65,7 +65,7 @@
     {
       "version": "3.3.0",
       "is_beta": false,
-      "summary": "Le lien d'appairage embarque automatiquement les URLs des certificats du serveur (/v1/pairing/cert et /v1/pairing/ca) : l'application installe ses certificats toute seule.",
+      "summary": "Le lien d'appairage embarque automatiquement les URLs des certificats du serveur (/v1/pairing/cert et /v1/pairing/ca) : l'application installe ses certificats toute seule. Les lanceurs déjà générés migrent automatiquement vers le nouveau dossier de données.",
       "tag": "v3.3.0",
       "released_at": "2026-09-16",
       "install_source": "Locaryn/morph-remote#v3.3.0"

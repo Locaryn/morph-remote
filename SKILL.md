@@ -25,6 +25,17 @@ serveur (`https://…`, celle que le tunnel ou le port redirigé annonce) :
   là-bas avant toute connexion. Le fichier est déposé dans le dossier de
   données du morph ; la réponse dit où.
 
+## Compatibilité : où sont les lanceurs déjà générés
+
+Le morph a été renommé (morph-travel-tunnel → morph-remote). Les lanceurs
+générés avant le renommage vivent dans `~/.lochor/morph/travel-tunnel` ; la
+v3.3 les dépose dans `~/.lochor/morph/remote`. **Au démarrage du serveur MCP
+et avant chaque génération, le morph ramène automatiquement les lanceurs de
+l'ancien dossier vers le nouveau** — sans jamais écraser un fichier plus
+récent, et sans toucher aux autres fichiers. La personne n'a rien à faire :
+un lanceur généré avec la v3.2 reste trouvable et réutilisable après la mise
+à jour.
+
 ## Les certificats, embarqués dans le lien
 
 Les trois outils embarquent d'eux-mêmes les URLs `cert` et `ca` du serveur

@@ -1,4 +1,5 @@
 //! Stdio MCP server shipped by morph-remote.
+use locaryn_plugin_remote::data_migration::migrate_launchers;
 use locaryn_plugin_remote::link_build::{
     build_connect_link, build_pairing_launcher, derive_certificate_urls, find_launcher_bytes,
 };
@@ -11,6 +12,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tokio::main]
 async fn main() {
+    migrate_data_folders();
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     while let Ok(Some(line)) = lines.next_line().await {
         if line.trim().is_empty() {
@@ -208,6 +210,7 @@ async fn call_tool(name: &str, args: Value) -> Result<Value, String> {
             // endroit que l'application sait lire, et que la personne peut
             // récupérer par ses propres moyens.
             let dir = locaryn_config_shim::data_dir()?;
+            migrate_data_folders();
             std::fs::create_dir_all(&dir)
                 .map_err(|e| format!("dossier de données : {e}"))?;
             let path = dir.join(&filename);
@@ -233,17 +236,77 @@ async fn call_tool(name: &str, args: Value) -> Result<Value, String> {
 /// Le dossier où déposer ce que l'outil produit. Petit shim local : le morph
 /// ne dépend pas de la config de l'hôte, et un dossier de données par défaut
 /// suffit — la personne récupère le fichier ensuite par ses moyens.
+///
+/// Le nom du dossier suit celui du morph. Il est aujourd'hui `remote` : c'est
+/// là que la v3.3 dépose les lanceurs. L'ancien nom (`travel-tunnel`) reste
+/// connu : c'est de là que la migration ramène les lanceurs déjà générés.
 mod locaryn_config_shim {
-    pub fn data_dir() -> Result<std::path::PathBuf, String> {
-        if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
-            let mut p = std::path::PathBuf::from(home);
-            p.push(".lochor");
-            p.push("morph");
-            p.push("travel-tunnel");
-            return Ok(p);
-        }
-        Err("Aucun répertoire utilisateur connu (USERPROFILE/HOME).".into())
+    use std::path::PathBuf;
+
+    /// Le dossier courant, dérivé du nom actuel du morph.
+    pub fn data_dir() -> Result<PathBuf, String> {
+        let home = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .ok_or("Aucun répertoire utilisateur connu (USERPROFILE/HOME).")?;
+        Ok(home_dir(&home).join("remote"))
     }
+
+    /// Les dossiers connus pour avoir porté les données du morph, du plus
+    /// ancien au plus récent. Ajouter le nouveau nom ici suffit si un jour il
+    /// change encore.
+    pub(crate) fn legacy_dirs(home: &std::ffi::OsStr) -> Vec<PathBuf> {
+        let mut v = Vec::new();
+        let mut p = PathBuf::from(home);
+        p.push(".lochor");
+        p.push("morph");
+        p.push("travel-tunnel");
+        v.push(p);
+        v
+    }
+
+    fn home_dir(home: &std::ffi::OsStr) -> PathBuf {
+        let mut p = PathBuf::from(home);
+        p.push(".lochor");
+        p.push("morph");
+        p
+    }
+}
+
+/// Ramène les lanceurs des anciens dossiers de données vers le dossier
+/// courant, une fois au démarrage puis avant chaque génération (un serveur
+/// MCP peut tourner longtemps : la migration peut être arrivée pendant qu'il
+/// tournait, ou avoir été ratée au démarrage). Jamais bloquant : une erreur
+/// est consignée, la génération n'a besoin d'aucun fichier hérité.
+fn migrate_data_folders() {
+    let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) else {
+        return;
+    };
+    let Ok(current) = locaryn_config_shim::data_dir() else {
+        return;
+    };
+    for legacy in locaryn_config_shim::legacy_dirs(&home) {
+        if legacy == current {
+            continue;
+        }
+        match migrate_launchers(&legacy, &current) {
+            Ok((moved, _left)) if moved > 0 => {
+                tracing_or_log(&format!(
+                    "migration : {} lanceur(s) déplacé(s) de {} vers {}",
+                    moved,
+                    legacy.display(),
+                    current.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => tracing_or_log(&format!("migration de {} ignorée : {e}", legacy.display())),
+        }
+    }
+}
+
+/// Ce morph n'a pas de dépendance de journalisation : un simple eprintln
+/// sur stderr, canal des diagnostics en stdio MCP (stdout porte le protocole).
+fn tracing_or_log(message: &str) {
+    eprintln!("[morph-remote] {message}");
 }
 
 fn text_content(value: Value) -> Value {
