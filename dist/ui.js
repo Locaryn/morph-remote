@@ -108,6 +108,52 @@
     return bloc;
   }
 
+  /**
+   * Une fenêtre de l'hôte (voile + carte), montée sur `document.body` pour ne
+   * pas être recouverte par la colonne de réglages. Échap ou un clic sur le
+   * voile la ferment.
+   */
+  function ouvrirFenetre(titre, texte, boutons) {
+    const voile = creer("div", "locaryn-modal-overlay");
+    voile.setAttribute("role", "presentation");
+    const carte = creer("dialog", "locaryn-card");
+    carte.open = true;
+    carte.setAttribute("aria-modal", "true");
+    carte.setAttribute("aria-label", titre);
+    carte.appendChild(creer("h3", "locaryn-section-title", titre));
+    carte.appendChild(creer("p", "locaryn-field-hint", texte));
+    const actions = creer("div", "locaryn-pairing-actions");
+    function surTouche(e) {
+      if (e.key === "Escape") fermer();
+    }
+    function fermer() {
+      document.removeEventListener("keydown", surTouche);
+      voile.remove();
+    }
+    for (const b of boutons) {
+      const el = creer("button", b.principal ? "locaryn-btn-primary" : "locaryn-btn-ghost", b.texte);
+      el.type = "button";
+      el.addEventListener("click", () => {
+        fermer();
+        if (b.action) b.action();
+      });
+      actions.appendChild(el);
+    }
+    carte.appendChild(actions);
+    voile.appendChild(carte);
+    voile.addEventListener("click", (e) => {
+      if (e.target === voile) fermer();
+    });
+    document.addEventListener("keydown", surTouche);
+    document.body.appendChild(voile);
+    const premier = actions.querySelector("button");
+    if (premier) premier.focus();
+  }
+
+  function messageDe(err) {
+    return String(err && err.message ? err.message : err);
+  }
+
   // ── Accès distant : une adresse que l'utilisateur connaît ──────────────
   //
   // Le morph ne devine pas l'adresse publique : personne d'autre que la
@@ -214,6 +260,19 @@
   // Aucun relais n'est livré avec le morph — on regarde lesquels sont là, et
   // on dit comment obtenir celui qui manque plutôt que d'échouer sans raison.
 
+  /** Le relais peut-il s'ouvrir tout de suite ? */
+  function pret(r) {
+    return Boolean(r.installed && (!r.needs_account || r.account_ready !== false));
+  }
+
+  /** Ce que dit l'option du sélecteur, avant le choix. */
+  function libelle(r) {
+    if (!r.installed) return `${r.label} — non installé`;
+    if (r.needs_account && r.account_ready === false) return `${r.label} — compte à connecter`;
+    if (r.needs_account && r.account_ready === undefined) return `${r.label} — compte requis`;
+    return r.label;
+  }
+
   class PanneauTunnel extends HTMLElement {
     constructor() {
       super();
@@ -227,11 +286,106 @@
       // Le serveur vers lequel renvoyer, quand le relais en reclame un. Garde
       // d'une session a l'autre : personne ne veut retaper son serveur.
       this.cible = lire("morph-remote-cible", "");
+      // Le jeton que la personne colle pour un relais qui en demande un. Il
+      // part tel quel vers l'outil du relais, jamais ailleurs.
+      this.jeton = "";
+      // Le relais dont on attend la connexion dans le navigateur.
+      this.attenteConnexion = "";
+      this.minuterie = 0;
     }
 
     connectedCallback() {
       this.rendre();
       void this.rafraichir();
+      // L'état vient du service : un tunnel ouvert ou tombé ailleurs se voit
+      // ici sans recharger la page.
+      this.minuterie = window.setInterval(() => void this.suivre(), 4000);
+    }
+
+    disconnectedCallback() {
+      window.clearInterval(this.minuterie);
+    }
+
+    /** Relire l'état du service ; les relais aussi quand on attend une connexion. */
+    async suivre() {
+      const h = hote(this);
+      if (!h || this.occupe || !this.charge) return;
+      try {
+        const etat = await h.etatPartage();
+        const avant = Boolean(this.etat && this.etat.active);
+        const apres = Boolean(etat && etat.active);
+        this.etat = etat || null;
+        let change = avant !== apres;
+        if (this.attenteConnexion) {
+          this.relais = (await h.relaisDisponibles()) || [];
+          const r = this.relais.find((x) => x.id === this.attenteConnexion);
+          if (r && pret(r)) {
+            this.attenteConnexion = "";
+            change = true;
+          }
+        }
+        if (apres && !avant) {
+          if (etat.provider) this.choisi = etat.provider;
+          void this.produireCode();
+        }
+        if (!apres && avant) this.code = null;
+        if (change) this.rendre();
+      } catch (err) {
+        this.erreur = messageDe(err);
+        this.rendre();
+      }
+    }
+
+    /** Ce qu'on propose pour le relais choisi, au moment où on le choisit. */
+    guider() {
+      const h = hote(this);
+      const r = this.relais.find((x) => x.id === this.choisi);
+      if (!h || !r || typeof h.ouvrirPageRelais !== "function") return;
+      const echec = (e) => {
+        this.erreur = messageDe(e);
+        this.rendre();
+      };
+      if (!r.installed) {
+        if (!r.download_url) return;
+        ouvrirFenetre(
+          `${r.label} n'est pas installé`,
+          `Le tunnel passe par l'outil de ${r.label}, absent de cette machine. ` +
+            "Locaryn n'installe rien à votre place : la page officielle de téléchargement " +
+            "s'ouvre dans votre navigateur. Installez-le, puis revenez ici.",
+          [
+            {
+              texte: "Ouvrir la page de téléchargement",
+              principal: true,
+              action: () => h.ouvrirPageRelais(r.id, "download").catch(echec),
+            },
+            { texte: "Annuler" },
+          ],
+        );
+        return;
+      }
+      if (r.needs_account && r.account_ready === false && r.sign_in === "paste_token") {
+        h.ouvrirPageRelais(r.id, "login").catch(echec);
+      }
+    }
+
+    async connecter() {
+      const h = hote(this);
+      const r = this.relais.find((x) => x.id === this.choisi);
+      if (!h || !r) return;
+      this.occupe = true;
+      this.erreur = null;
+      this.rendre();
+      try {
+        await h.connecterRelais(r.id, r.sign_in === "paste_token" ? this.jeton.trim() : undefined);
+        this.jeton = "";
+        if (r.sign_in === "command") this.attenteConnexion = r.id;
+        this.relais = (await h.relaisDisponibles()) || [];
+      } catch (err) {
+        this.erreur = messageDe(err);
+      } finally {
+        this.occupe = false;
+        this.rendre();
+      }
     }
 
     async rafraichir() {
@@ -249,8 +403,11 @@
         if (!this.choisi) {
           // Celui qui ne demande rien d'abord : découvrir qu'il faut un compte
           // au moment de partir est le pire moment pour l'apprendre.
-          const simple = this.relais.find((r) => r.installed && !r.needs_account);
-          this.choisi = (simple || this.relais.find((r) => r.installed) || this.relais[0] || {}).id || "";
+          // Le tunnel déjà ouvert d'abord : l'écran montre ce qui tourne.
+          const ouvert = etat && etat.active && etat.provider;
+          const simple = this.relais.find(pret);
+          this.choisi =
+            ouvert || (simple || this.relais.find((r) => r.installed) || this.relais[0] || {}).id || "";
         }
         this.erreur = null;
       } catch (err) {
@@ -298,6 +455,93 @@
       }
     }
 
+    /** Ce qu'il reste à faire pour le relais choisi, avec de quoi le faire. */
+    rendreGuide(r) {
+      const h = hote(this);
+      const guide = Boolean(h && typeof h.ouvrirPageRelais === "function");
+      if (!r.installed) {
+        this.appendChild(notice(r.install_hint));
+        if (guide && r.download_url) {
+          const b = creer("button", "locaryn-btn-ghost", `Installer ${r.label}…`);
+          b.type = "button";
+          b.addEventListener("click", () => this.guider());
+          this.appendChild(b);
+        }
+        return;
+      }
+      if (!guide || !r.needs_account || r.account_ready !== false) return;
+
+      const bloc = creer("div", "locaryn-pairing-public");
+      if (r.sign_in === "paste_token") {
+        const et = creer("label", "locaryn-pairing-select-label", `Jeton ${r.label}`);
+        et.htmlFor = "morph-remote-jeton";
+        bloc.appendChild(et);
+        bloc.appendChild(
+          creer(
+            "p",
+            "locaryn-field-hint",
+            `Connectez-vous (ou créez un compte) sur la page ${r.label} ouverte dans votre navigateur, ` +
+              "copiez le jeton affiché (« authtoken ») et collez-le ici. Il est remis à l'outil " +
+              `${r.label} de cette machine, nulle part ailleurs.`,
+          ),
+        );
+        const ligne = creer("div", "locaryn-pairing-public-row");
+        const champ = creer("input", "locaryn-input");
+        champ.id = "morph-remote-jeton";
+        champ.type = "password";
+        champ.autocomplete = "off";
+        champ.spellcheck = false;
+        champ.value = this.jeton;
+        champ.disabled = this.occupe;
+        champ.addEventListener("input", (e) => {
+          this.jeton = e.target.value;
+          const b = this.querySelector("[data-role=connecter]");
+          if (b) b.disabled = this.occupe || this.jeton.trim() === "";
+        });
+        champ.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && this.jeton.trim() !== "") void this.connecter();
+        });
+        ligne.appendChild(champ);
+        const ok = creer("button", "locaryn-btn-primary", this.occupe ? "…" : "Enregistrer");
+        ok.type = "button";
+        ok.setAttribute("data-role", "connecter");
+        ok.disabled = this.occupe || this.jeton.trim() === "";
+        ok.addEventListener("click", () => void this.connecter());
+        ligne.appendChild(ok);
+        bloc.appendChild(ligne);
+        const page = creer("button", "locaryn-btn-ghost", "Rouvrir la page du jeton");
+        page.type = "button";
+        page.addEventListener("click", () =>
+          h.ouvrirPageRelais(r.id, "login").catch((e) => {
+            this.erreur = messageDe(e);
+            this.rendre();
+          }),
+        );
+        bloc.appendChild(page);
+      } else if (r.sign_in === "command") {
+        const attend = this.attenteConnexion === r.id;
+        bloc.appendChild(
+          creer(
+            "p",
+            "locaryn-field-hint",
+            attend
+              ? `Connectez-vous sur la page ${r.label} ouverte dans votre navigateur : cet écran se met à jour seul.`
+              : `${r.label} demande un compte. La connexion se fait sur sa page officielle, dans votre navigateur ; rien à coller ici.`,
+          ),
+        );
+        const b = creer(
+          "button",
+          "locaryn-btn-primary",
+          attend ? "Rouvrir la connexion" : `Se connecter à ${r.label}`,
+        );
+        b.type = "button";
+        b.disabled = this.occupe;
+        b.addEventListener("click", () => void this.connecter());
+        bloc.appendChild(b);
+      }
+      this.appendChild(bloc);
+    }
+
     rendre() {
       const h = hote(this);
       vider(this);
@@ -331,17 +575,15 @@
         const o = document.createElement("option");
         o.value = r.id;
         // Ce qui manque est dit avant le choix, pas découvert comme un échec.
-        o.textContent = r.installed
-          ? r.needs_account
-            ? `${r.label} — compte requis`
-            : r.label
-          : `${r.label} — non installé`;
+        o.textContent = libelle(r);
         if (r.id === this.choisi) o.selected = true;
         choix.appendChild(o);
       }
       choix.addEventListener("change", (e) => {
         this.choisi = e.target.value;
+        this.erreur = null;
         this.rendre();
+        this.guider();
       });
       ligne.appendChild(choix);
 
@@ -355,7 +597,11 @@
       const relaisChoisi = this.relais.find((r) => r.id === this.choisi);
       const cibleManquante =
         Boolean(relaisChoisi && relaisChoisi.needs_target) && this.cible.trim() === "";
-      bouton.disabled = this.occupe || (!actif && (this.choisi === "" || cibleManquante));
+      const incomplet = Boolean(
+        relaisChoisi && relaisChoisi.account_ready !== undefined && !pret(relaisChoisi),
+      );
+      bouton.disabled =
+        this.occupe || (!actif && (this.choisi === "" || cibleManquante || incomplet));
       bouton.addEventListener("click", () => void this.basculer());
       ligne.appendChild(bouton);
 
@@ -391,9 +637,7 @@
         this.appendChild(bloc2);
       }
 
-      if (relais && !relais.installed && !actif) {
-        this.appendChild(notice(relais.install_hint));
-      }
+      if (relais && !actif) this.rendreGuide(relais);
 
       if (this.etat && this.etat.blocker) this.appendChild(notice(this.etat.blocker));
       if (this.erreur) this.appendChild(avertissement(this.erreur));
