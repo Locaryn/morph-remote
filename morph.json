@@ -6,7 +6,7 @@
   "replaces": [
     "morph-travel-tunnel"
   ],
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "Ajoute deux modes d'appairage aux réglages serveur : un port joignable de l'extérieur, et un tunnel sortant vers un relais (Cloudflare, ngrok, tunnels Microsoft) sans rien ouvrir sur la box.",
   "author": "Locaryn Team",
   "license": "Apache-2.0",
@@ -43,12 +43,12 @@
         "id": "pairing-public",
         "slot": "settings.server.pairing",
         "order": 10,
-        "label": "Accès distant",
+        "label": "Internet (IP publique)",
         "icon": "server",
         "type": "custom-element",
         "entry": "dist/ui.js",
         "tag": "locaryn-pairing-public",
-        "hint": "L'IP publique de cette machine, lue automatiquement, avec le port du service : le QR s'affiche tout de suite. Le port se change à part."
+        "hint": "Le réseau local, plus tout appareil sur Internet qui a scanné le code. Le port du service doit être ouvert sur la box."
       },
       {
         "id": "pairing-tunnel",
@@ -59,13 +59,21 @@
         "type": "custom-element",
         "entry": "dist/ui.js",
         "tag": "locaryn-pairing-tunnel",
-        "hint": "Un tunnel sortant vers un relais : rien à ouvrir sur la box. Le QR porte l'adresse que le relais annonce."
+        "hint": "Le réseau local, plus tout appareil sur Internet qui a scanné le code, par un relais : rien à ouvrir sur la box."
       }
     ]
   },
   "beta": false,
   "stability": "tested",
   "versions": [
+    {
+      "version": "3.6.0",
+      "is_beta": false,
+      "summary": "Un seul sélecteur de mode dans l'application : « Internet (IP publique) » et « Tunnel » y disent qui peut se connecter.",
+      "tag": "v3.6.0",
+      "released_at": "2026-11-09",
+      "install_source": "Locaryn/morph-remote#v3.6.0"
+    },
     {
       "version": "3.5.0",
       "is_beta": false,
