@@ -67,12 +67,14 @@
    * Le SVG vient du service local par la fonction que l'hote a pretee : il
    * n'est pas fabrique ici, et rien ne s'affiche tant qu'il n'est pas arrive.
    */
-  function blocQr(code, surCopie) {
+  function blocQr(code, surCopie, h) {
     const bloc = creer("div", "locaryn-travel-code");
 
     const bouton = creer("button", "locaryn-travel-qr");
     bouton.type = "button";
-    bouton.title = "Code d'appairage";
+    const agrandir = h && typeof h.agrandirCode === "function";
+    bouton.title = agrandir ? "Afficher le code en grand" : "Code d'appairage";
+    if (agrandir) bouton.addEventListener("click", () => h.agrandirCode(code.qr_svg));
     // Le SVG est produit par le service local de la machine, pas par le reseau.
     bouton.innerHTML = code.qr_svg;
     bloc.appendChild(bouton);
@@ -231,6 +233,29 @@
       }
     }
 
+    /** Une ligne rouge, « Utiliser le tunnel », et le détail replié. */
+    rendreAvertissement(h) {
+      const c = this.code;
+      const bloc = creer("div", "locaryn-vp-error");
+      bloc.setAttribute("role", "status");
+      bloc.appendChild(creer("strong", null, c.warning));
+      const actions = creer("div", "locaryn-pairing-actions");
+      if (h && typeof h.choisirSegment === "function") {
+        const tunnel = creer("button", "locaryn-btn-ghost", "Utiliser le tunnel");
+        tunnel.type = "button";
+        tunnel.addEventListener("click", () => h.choisirSegment("pairing-tunnel"));
+        actions.appendChild(tunnel);
+      }
+      if (c.warning_detail) {
+        const details = creer("details", "locaryn-field-hint");
+        details.appendChild(creer("summary", null, "Détails"));
+        details.appendChild(creer("p", null, c.warning_detail));
+        actions.appendChild(details);
+      }
+      if (actions.firstChild) bloc.appendChild(actions);
+      this.appendChild(bloc);
+    }
+
     rendreReglages() {
       const bloc = creer("div", "locaryn-pairing-public");
       const etiquette = creer("label", "locaryn-pairing-select-label", "Port");
@@ -286,13 +311,17 @@
         );
       }
       if (this.erreur) this.appendChild(avertissement(this.erreur));
-      if (this.code && this.code.warning) this.appendChild(notice(this.code.warning));
+      if (this.code && this.code.warning) this.rendreAvertissement(h);
       if (this.code && this.code.qr_svg) {
         this.appendChild(
-          blocQr(this.code, (m) => {
-            this.erreur = m;
-            this.rendre();
-          }),
+          blocQr(
+            this.code,
+            (m) => {
+              this.erreur = m;
+              this.rendre();
+            },
+            h,
+          ),
         );
       }
 
@@ -706,10 +735,14 @@
 
       if (this.code && this.code.qr_svg) {
         this.appendChild(
-          blocQr(this.code, (m) => {
-            this.erreur = m;
-            this.rendre();
-          }),
+          blocQr(
+            this.code,
+            (m) => {
+              this.erreur = m;
+              this.rendre();
+            },
+            h,
+          ),
         );
       }
     }
