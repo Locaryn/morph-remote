@@ -319,6 +319,15 @@
             h,
           ),
         );
+        // Le port Internet exige le certificat remis à l'appairage : un
+        // téléphone neuf le reçoit en scannant ce code sur le même Wi‑Fi.
+        this.appendChild(
+          creer(
+            "p",
+            "locaryn-field-hint",
+            "Un téléphone neuf scanne ce code une première fois sur le même Wi‑Fi.",
+          ),
+        );
       }
 
       const plus = creer(

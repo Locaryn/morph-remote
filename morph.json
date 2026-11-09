@@ -6,7 +6,7 @@
   "replaces": [
     "morph-travel-tunnel"
   ],
-  "version": "3.6.1",
+  "version": "3.7.0",
   "description": "Ajoute deux modes d'appairage aux réglages serveur : un port joignable de l'extérieur, et un tunnel sortant vers un relais (Cloudflare, ngrok, tunnels Microsoft) sans rien ouvrir sur la box.",
   "author": "Locaryn Team",
   "license": "Apache-2.0",
@@ -48,7 +48,7 @@
         "type": "custom-element",
         "entry": "dist/ui.js",
         "tag": "locaryn-pairing-public",
-        "hint": "Le réseau local, plus tout appareil sur Internet qui a scanné le code. Le port du service doit être ouvert sur la box."
+        "hint": "Le réseau local, plus vos appareils appairés depuis Internet : chacun présente le certificat reçu à l'appairage."
       },
       {
         "id": "pairing-tunnel",
@@ -66,6 +66,14 @@
   "beta": false,
   "stability": "tested",
   "versions": [
+    {
+      "version": "3.7.0",
+      "is_beta": false,
+      "summary": "Internet : seuls les appareils appairés passent, avec le certificat reçu à l'appairage. Un téléphone neuf scanne le code une première fois sur le même Wi‑Fi.",
+      "tag": "v3.7.0",
+      "released_at": "2026-11-09",
+      "install_source": "Locaryn/morph-remote#v3.7.0"
+    },
     {
       "version": "3.6.1",
       "is_beta": false,
