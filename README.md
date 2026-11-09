@@ -1,3 +1,3 @@
-# plugin-travel-tunnel
+# morph-remote
 
 Extension de mode distant et tunnels chiffrés pour Locaryn.
