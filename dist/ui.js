@@ -82,11 +82,7 @@
     const dire = creer("div", "locaryn-travel-say");
     dire.appendChild(creer("p", "locaryn-travel-title", "Scannez avec le téléphone"));
     dire.appendChild(
-      creer(
-        "p",
-        "locaryn-travel-sub",
-        "Le code porte l'adresse et l'empreinte de cette machine. Rien à saisir.",
-      ),
+      creer("p", "locaryn-travel-sub", "Dans l'app Locaryn : « Scanner un QR code »."),
     );
 
     const actions = creer("div", "locaryn-pairing-actions");
@@ -286,7 +282,7 @@
         creer(
           "p",
           "locaryn-field-hint",
-          "Vide : le port du service. Un autre port suppose que la box le redirige vers cette machine. Un nom de domaine (maison.exemple:7443) remplace l'adresse publique.",
+          "Vide : le port du service. Un autre port doit être redirigé par la box.",
         ),
       );
       this.appendChild(bloc);
@@ -299,7 +295,7 @@
       if (h && !h.serveurActif) {
         this.appendChild(
           notice(
-            "Activez le partage réseau dans la colonne de gauche : sans service en écoute, une adresse publique ne mène nulle part.",
+            "Serveur arrêté : choisissez ce mode dans Service & Mode Serveur.",
           ),
         );
         return;
@@ -567,9 +563,7 @@
           creer(
             "p",
             "locaryn-field-hint",
-            `Connectez-vous (ou créez un compte) sur la page ${r.label} ouverte dans votre navigateur, ` +
-              "copiez le jeton affiché (« authtoken ») et collez-le ici. Il est remis à l'outil " +
-              `${r.label} de cette machine, nulle part ailleurs.`,
+            `Collez le jeton (« authtoken ») de la page ${r.label} ouverte dans votre navigateur.`,
           ),
         );
         const ligne = creer("div", "locaryn-pairing-public-row");
@@ -612,8 +606,8 @@
             "p",
             "locaryn-field-hint",
             attend
-              ? `Connectez-vous sur la page ${r.label} ouverte dans votre navigateur : cet écran se met à jour seul.`
-              : `${r.label} demande un compte. La connexion se fait sur sa page officielle, dans votre navigateur ; rien à coller ici.`,
+              ? "Connectez-vous dans le navigateur : cet écran se met à jour seul."
+              : `${r.label} demande un compte, à connecter dans votre navigateur.`,
           ),
         );
         const b = creer(
@@ -636,7 +630,7 @@
       if (h && !h.serveurActif) {
         this.appendChild(
           notice(
-            "Activez le partage réseau dans la colonne de gauche : un tunnel qui ne mène à aucun service ouvert ne sert à rien.",
+            "Serveur arrêté : choisissez ce mode dans Service & Mode Serveur.",
           ),
         );
         return;
@@ -718,7 +712,7 @@
           creer(
             "p",
             "locaryn-field-hint",
-            "Le port que le serveur ouvrira. Ajoutez « /2222 » si son SSH n'écoute pas sur 22. La clé vient de votre agent SSH — Locaryn n'en manipule aucune.",
+            "Ajoutez « /2222 » si SSH n'écoute pas sur 22.",
           ),
         );
         this.appendChild(bloc2);
