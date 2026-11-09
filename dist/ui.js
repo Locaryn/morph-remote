@@ -102,6 +102,26 @@
         .catch((e) => surCopie(String(e)));
     });
     actions.appendChild(copier);
+
+    // Le même serveur pour un PC d'un autre réseau : le lien s'ouvre dans
+    // Locaryn, qui propose la connexion. Copié, jamais affiché.
+    if (code.connect_link) {
+      const pc = creer("button", "locaryn-btn-ghost", "Lien pour un PC");
+      pc.type = "button";
+      pc.title = "Copier le lien à ouvrir sur un PC où Locaryn est installé";
+      pc.addEventListener("click", () => {
+        navigator.clipboard
+          .writeText(code.connect_link)
+          .then(() => {
+            pc.textContent = "Lien copié";
+            window.setTimeout(() => {
+              pc.textContent = "Lien pour un PC";
+            }, 1500);
+          })
+          .catch((e) => surCopie(String(e)));
+      });
+      actions.appendChild(pc);
+    }
     dire.appendChild(actions);
 
     bloc.appendChild(dire);
@@ -154,23 +174,39 @@
     return String(err && err.message ? err.message : err);
   }
 
-  // ── Accès distant : une adresse que l'utilisateur connaît ──────────────
+  // ── Accès distant : l'IP publique de cette machine, port par défaut ────
   //
-  // Le morph ne devine pas l'adresse publique : personne d'autre que la
-  // personne qui a redirigé son port ne la connaît. On la demande, et le
-  // service local dessine le code qui la porte.
+  // Ouvrir l'onglet suffit : le service lit l'IP publique (la box d'abord,
+  // qu'il tente d'ouvrir par UPnP) et dessine le code avec le port du
+  // service. Changer de port, ou donner un nom de domaine, reste possible
+  // dans un champ secondaire. L'adresse n'est jamais écrite à l'écran :
+  // elle n'est que dans le code et dans le lien copié.
+
+  /** Le port d'une URL, sans afficher le reste. */
+  function portDe(url) {
+    try {
+      const u = new URL(url);
+      return u.port || (u.protocol === "https:" ? "443" : "80");
+    } catch {
+      return "";
+    }
+  }
 
   class PanneauPublic extends HTMLElement {
     constructor() {
       super();
-      this.adresse = "";
+      // Vide : l'adresse par défaut. Un port seul, ou une adresse complète.
+      this.saisie = "";
       this.code = null;
       this.erreur = null;
       this.occupe = false;
+      this.reglages = false;
     }
 
     connectedCallback() {
+      const h = hote(this);
       this.rendre();
+      if (h && h.serveurActif) void this.generer();
     }
 
     async generer() {
@@ -185,14 +221,50 @@
       this.code = null;
       this.rendre();
       try {
-        this.code = await h.demanderCode("public", this.adresse.trim());
+        this.code = await h.demanderCode("public", this.saisie.trim());
       } catch (e) {
         this.code = null;
-        this.erreur = String(e && e.message ? e.message : e);
+        this.erreur = messageDe(e);
       } finally {
         this.occupe = false;
         this.rendre();
       }
+    }
+
+    rendreReglages() {
+      const bloc = creer("div", "locaryn-pairing-public");
+      const etiquette = creer("label", "locaryn-pairing-select-label", "Port");
+      etiquette.htmlFor = "morph-remote-port";
+      bloc.appendChild(etiquette);
+
+      const ligne = creer("div", "locaryn-pairing-public-row");
+      const champ = creer("input", "locaryn-input");
+      champ.id = "morph-remote-port";
+      champ.inputMode = "numeric";
+      champ.placeholder = (this.code && portDe(this.code.url)) || "7474";
+      champ.value = this.saisie;
+      champ.addEventListener("input", (e) => {
+        this.saisie = e.target.value;
+      });
+      champ.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") void this.generer();
+      });
+      ligne.appendChild(champ);
+
+      const bouton = creer("button", "locaryn-btn-ghost", this.occupe ? "…" : "Appliquer");
+      bouton.type = "button";
+      bouton.disabled = this.occupe;
+      bouton.addEventListener("click", () => void this.generer());
+      ligne.appendChild(bouton);
+      bloc.appendChild(ligne);
+      bloc.appendChild(
+        creer(
+          "p",
+          "locaryn-field-hint",
+          "Vide : le port du service. Un autre port suppose que la box le redirige vers cette machine. Un nom de domaine (maison.exemple:7443) remplace l'adresse publique.",
+        ),
+      );
+      this.appendChild(bloc);
     }
 
     rendre() {
@@ -208,41 +280,13 @@
         return;
       }
 
-      const bloc = creer("div", "locaryn-pairing-public");
-      const etiquette = creer(
-        "label",
-        "locaryn-pairing-select-label",
-        "Adresse publique et port",
-      );
-      etiquette.htmlFor = "morph-remote-adresse";
-      bloc.appendChild(etiquette);
-
-      const ligne = creer("div", "locaryn-pairing-public-row");
-      const champ = creer("input", "locaryn-input");
-      champ.id = "morph-remote-adresse";
-      champ.placeholder = "maison.exemple:7443";
-      champ.value = this.adresse;
-      champ.addEventListener("input", (e) => {
-        this.adresse = e.target.value;
-        const b = this.querySelector("[data-role=generer]");
-        if (b) b.disabled = this.occupe || this.adresse.trim() === "";
-      });
-      champ.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && this.adresse.trim() !== "") void this.generer();
-      });
-      ligne.appendChild(champ);
-
-      const bouton = creer("button", "locaryn-btn-ghost", this.occupe ? "Génération…" : "Générer");
-      bouton.type = "button";
-      bouton.setAttribute("data-role", "generer");
-      bouton.disabled = this.occupe || this.adresse.trim() === "";
-      bouton.addEventListener("click", () => void this.generer());
-      ligne.appendChild(bouton);
-
-      bloc.appendChild(ligne);
-      this.appendChild(bloc);
-
+      if (this.occupe && !this.code) {
+        this.appendChild(
+          creer("p", "locaryn-field-hint", "Recherche de l'adresse publique de cette machine…"),
+        );
+      }
       if (this.erreur) this.appendChild(avertissement(this.erreur));
+      if (this.code && this.code.warning) this.appendChild(notice(this.code.warning));
       if (this.code && this.code.qr_svg) {
         this.appendChild(
           blocQr(this.code, (m) => {
@@ -251,6 +295,20 @@
           }),
         );
       }
+
+      const plus = creer(
+        "button",
+        "locaryn-btn-ghost",
+        this.reglages ? "Masquer le port" : "Changer le port",
+      );
+      plus.type = "button";
+      plus.setAttribute("aria-expanded", String(this.reglages));
+      plus.addEventListener("click", () => {
+        this.reglages = !this.reglages;
+        this.rendre();
+      });
+      this.appendChild(plus);
+      if (this.reglages) this.rendreReglages();
     }
   }
 

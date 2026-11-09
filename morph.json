@@ -6,7 +6,7 @@
   "replaces": [
     "morph-travel-tunnel"
   ],
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Ajoute deux modes d'appairage aux réglages serveur : un port joignable de l'extérieur, et un tunnel sortant vers un relais (Cloudflare, ngrok, tunnels Microsoft) sans rien ouvrir sur la box.",
   "author": "Locaryn Team",
   "license": "Apache-2.0",
@@ -48,7 +48,7 @@
         "type": "custom-element",
         "entry": "dist/ui.js",
         "tag": "locaryn-pairing-public",
-        "hint": "Pour une adresse publique ou un port redirigé vers cette machine. Le QR porte l'adresse, le port et l'empreinte."
+        "hint": "L'IP publique de cette machine, lue automatiquement, avec le port du service : le QR s'affiche tout de suite. Le port se change à part."
       },
       {
         "id": "pairing-tunnel",
@@ -66,6 +66,14 @@
   "beta": false,
   "stability": "tested",
   "versions": [
+    {
+      "version": "3.4.0",
+      "is_beta": false,
+      "summary": "Accès distant : le QR s'affiche aussitôt avec l'IP publique et le port du service, le port se change à part ; bouton « Lien pour un PC ».",
+      "tag": "v3.4.0",
+      "released_at": "2026-11-09",
+      "install_source": "Locaryn/morph-remote#v3.4.0"
+    },
     {
       "version": "3.3.0",
       "is_beta": false,
