@@ -244,10 +244,18 @@
       }
       if (c.warning_detail) {
         const details = creer("details", "locaryn-field-hint");
-        details.appendChild(creer("summary", null, "Détails"));
+        const resume = creer("summary", null, "Détails");
+        // Même hauteur que le bouton voisin, texte centré sur sa ligne.
+        resume.style.display = "flex";
+        resume.style.alignItems = "center";
+        resume.style.minHeight = "44px";
+        resume.style.cursor = "pointer";
+        details.style.margin = "0";
+        details.appendChild(resume);
         details.appendChild(creer("p", null, c.warning_detail));
         actions.appendChild(details);
       }
+      actions.style.alignItems = "flex-start";
       if (actions.firstChild) bloc.appendChild(actions);
       this.appendChild(bloc);
     }
