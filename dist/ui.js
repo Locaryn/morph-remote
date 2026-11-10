@@ -190,6 +190,29 @@
     }
   }
 
+  /**
+   * L'hôte repose `context` à chaque changement (serveur démarré, arrêté).
+   * Sans cet accesseur le panneau gardait l'état vu à son ouverture : choisir
+   * un mode démarrait le serveur, et le panneau affichait toujours « Serveur
+   * arrêté ».
+   */
+  function suivreContexte(classe, apresDemarrage) {
+    Object.defineProperty(classe.prototype, "context", {
+      configurable: true,
+      get() {
+        return this._contexte;
+      },
+      set(c) {
+        const avant = Boolean(this._contexte && this._contexte.serveurActif);
+        this._contexte = c;
+        const apres = Boolean(c && c.serveurActif);
+        if (!this.isConnected || avant === apres) return;
+        this.rendre();
+        if (apres) apresDemarrage(this);
+      },
+    });
+  }
+
   class PanneauPublic extends HTMLElement {
     constructor() {
       super();
@@ -760,9 +783,11 @@
   }
 
   if (!customElements.get("locaryn-pairing-public")) {
+    suivreContexte(PanneauPublic, (el) => void el.generer());
     customElements.define("locaryn-pairing-public", PanneauPublic);
   }
   if (!customElements.get("locaryn-pairing-tunnel")) {
+    suivreContexte(PanneauTunnel, (el) => void el.rafraichir());
     customElements.define("locaryn-pairing-tunnel", PanneauTunnel);
   }
 })();
